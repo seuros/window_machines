@@ -7,5 +7,7 @@ license.workspace = true
 description = "Bounded event-time windows, watermarks, and session merging"
 readme = "README.md"
 exclude = ["src/**/tests.rs", "tests/"]
+keywords = ["windowing", "event-time", "watermark", "sessions", "no-std"]
+categories = ["no-std", "algorithms"]
 [lints]
 workspace = true

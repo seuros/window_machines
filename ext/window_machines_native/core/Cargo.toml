@@ -6,5 +6,6 @@ rust-version.workspace = true
 license.workspace = true
 description = "Bounded event-time windows, watermarks, and session merging"
 readme = "README.md"
+exclude = ["src/**/tests.rs", "tests/"]
 [lints]
 workspace = true

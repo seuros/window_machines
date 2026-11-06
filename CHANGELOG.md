@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/seuros/window_machines/compare/window_machines/v0.1.3...window_machines/v0.1.4) (2026-11-06)
+
+
+### Bug Fixes
+
+* crates.io keywords and categories for the core ([b8098d7](https://github.com/seuros/window_machines/commit/b8098d7d280dfd4e48ba7ade3a72b7f891853ec4))
+
 ## [0.1.3](https://github.com/seuros/window_machines/compare/window_machines/v0.1.2...window_machines/v0.1.3) (2026-11-06)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/seuros/window_machines/compare/window_machines/v0.1.2...window_machines/v0.1.3) (2026-11-06)
+
+
+### Bug Fixes
+
+* keep test sources out of the packaged gem and crate ([db7ff81](https://github.com/seuros/window_machines/commit/db7ff817e11a2448c17640631c2f8a6a254447a3))
+
 ## [0.1.2](https://github.com/seuros/window_machines/compare/window_machines/v0.1.1...window_machines/v0.1.2) (2026-11-06)
 
 

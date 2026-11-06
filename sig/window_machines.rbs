@@ -1,0 +1,17 @@
+module WindowMachines
+  VERSION: String
+  def self.tumbling: (Integer timestamp, Integer width) -> [Integer, Integer]
+  def self.sliding: (Integer timestamp, Integer width, Integer slide) -> Array[[Integer, Integer]]
+  class Watermark
+    def self.new: () -> instance
+    def advance: (Integer value) -> bool
+    def value: () -> Integer?
+    def closes?: (Integer start, Integer end, Integer lateness) -> bool
+  end
+  class Sessions
+    def self.new: (Integer gap) -> instance
+    def insert: (Integer timestamp) -> [Integer, Integer]
+    def advance_watermark: (Integer value) -> bool
+    def take_closed: () -> [Integer, Integer]?
+  end
+end

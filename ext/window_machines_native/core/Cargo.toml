@@ -1,0 +1,10 @@
+[package]
+name = "window-machines"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Bounded event-time windows, watermarks, and session merging"
+readme = "README.md"
+[lints]
+workspace = true

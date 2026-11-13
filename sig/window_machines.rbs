@@ -1,17 +1,93 @@
 module WindowMachines
   VERSION: String
-  def self.tumbling: (Integer timestamp, Integer width) -> [Integer, Integer]
-  def self.sliding: (Integer timestamp, Integer width, Integer slide) -> Array[[Integer, Integer]]
-  class Watermark
-    def self.new: () -> instance
-    def advance: (Integer value) -> bool
-    def value: () -> Integer?
-    def closes?: (Integer start, Integer end, Integer lateness) -> bool
+  # Sessions one tracker holds, and windows one `sliding` call can answer.
+  CAPACITY: Integer
+
+  # Refusals: the call was not honoured and changed nothing. Every reason has
+  # its own symbol; there is no catch-all.
+  type refusal = :overflow | :undersized | :regressed | :late | :full
+
+  # The core's `Advancing`: what an honoured watermark call did.
+  type advancing = :advanced | :repeated
+
+  # The core's `Inserting`: what an honoured insert did.
+  type inserting = Opened | Extended | Covered
+
+  # Honoured: the Window holding `timestamp`. Refused: :overflow.
+  def self.tumbling: (Integer timestamp, Integer width) -> (Window | :overflow)
+  # Honoured: the Windows holding `timestamp`, newest first, [] in a hole.
+  # Refused: :overflow, and :undersized past CAPACITY windows.
+  def self.sliding: (Integer timestamp, Integer size, Integer slide) -> (Array[Window] | :overflow | :undersized)
+
+  # Mirrors the core's `Window`.
+  class Window < Data
+    attr_reader start: Integer
+    attr_reader end: Integer
+    def self.new: (Integer start, Integer end) -> Window
+                | (start: Integer, end: Integer) -> Window
   end
+
+  # Mirrors the core's `Session`.
+  class Session < Data
+    attr_reader first: Integer
+    attr_reader last: Integer
+    def self.new: (Integer first, Integer last) -> Session
+                | (first: Integer, last: Integer) -> Session
+    # The core's `covers`.
+    def covers?: (Integer timestamp) -> bool
+  end
+
+  # `Inserting::Opened`.
+  class Opened < Data
+    attr_reader session: Session
+    def self.new: (Session session) -> Opened
+                | (session: Session) -> Opened
+  end
+
+  # `Inserting::Extended`.
+  class Extended < Data
+    attr_reader session: Session
+    def self.new: (Session session) -> Extended
+                | (session: Session) -> Extended
+  end
+
+  # `Inserting::Covered`.
+  class Covered < Data
+    attr_reader session: Session
+    def self.new: (Session session) -> Covered
+                | (session: Session) -> Covered
+  end
+
+  class Watermark
+    # Nothing observed yet (the core's `Default`).
+    def self.new: () -> Watermark
+    # Already standing at `value`.
+    def self.at: (Integer value) -> Watermark
+    # Honoured: :advanced, and :repeated when it already held exactly `value`
+    # (nothing changes). Refused: :regressed.
+    def advance: (Integer value) -> (advancing | :regressed)
+    # nil before the first observation.
+    def value: () -> Integer?
+    # A pure query: never refuses.
+    def closes?: (Window window, Integer allowed_lateness) -> bool
+  end
+
   class Sessions
-    def self.new: (Integer gap) -> instance
-    def insert: (Integer timestamp) -> [Integer, Integer]
-    def advance_watermark: (Integer value) -> bool
-    def take_closed: () -> [Integer, Integer]?
+    def self.new: (Integer gap) -> Sessions
+    def gap: () -> Integer
+    def capacity: () -> Integer
+    # Sessions held (the core's `len`).
+    def size: () -> Integer
+    def empty?: () -> bool
+    # A copy of the tracker's progress, never nil itself.
+    def watermark: () -> Watermark
+    # Honoured: Opened, Extended, and Covered when a held session already
+    # covers `timestamp` (nothing changes). Refused: :late, :overflow, :full.
+    def insert: (Integer timestamp) -> (inserting | :late | :overflow | :full)
+    # Honoured: :advanced, and :repeated when it already held exactly `value`
+    # (nothing changes). Refused: :regressed.
+    def advance_watermark: (Integer value) -> (advancing | :regressed)
+    # The earliest closed session, nil when none is closed. Never refuses.
+    def take_closed: () -> Session?
   end
 end

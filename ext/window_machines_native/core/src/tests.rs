@@ -1,5 +1,6 @@
 extern crate std;
 use super::*;
+use matryona_machines::testing::{refuses, unchanged};
 
 mod model;
 
@@ -139,11 +140,11 @@ fn watermark_advances_repeats_and_refuses_regression() {
     assert!(watermark.closes(window(0, 10), 0));
     assert!(!watermark.closes(window(0, 10), 1));
 
-    let before = watermark;
-    assert_eq!(watermark.advance(10), Ok(Advancing::Repeated));
-    assert_eq!(watermark, before);
-    assert_eq!(watermark.advance(9), Err(Refusal::Regressed));
-    assert_eq!(watermark, before);
+    assert_eq!(
+        unchanged(&mut watermark, |w| w.advance(10)),
+        Ok(Advancing::Repeated)
+    );
+    refuses(&mut watermark, Refusal::Regressed, |w| w.advance(9));
     assert_eq!(watermark.value(), Some(10));
 
     assert_eq!(watermark.advance(u64::MAX), Ok(Advancing::Advanced));
@@ -172,9 +173,7 @@ fn out_of_order_bridge_merges_full_session_tables_without_losing_data() {
     assert!(sessions.is_empty());
     assert_eq!(sessions.insert(0), Ok(Inserting::Opened(session(0, 0))));
     assert_eq!(sessions.insert(10), Ok(Inserting::Opened(session(10, 10))));
-    let before = sessions.clone();
-    assert_eq!(sessions.insert(30), Err(Refusal::Full));
-    assert_eq!(sessions, before);
+    refuses(&mut sessions, Refusal::Full, |s| s.insert(30));
     assert_eq!(sessions.len(), 2);
     // 5 is within the gap of both: one session, one slot freed.
     assert_eq!(sessions.insert(5), Ok(Inserting::Extended(session(0, 10))));
@@ -183,15 +182,17 @@ fn out_of_order_bridge_merges_full_session_tables_without_losing_data() {
     assert_eq!(sessions.advance_watermark(20), Ok(Advancing::Advanced));
     assert_eq!(sessions.watermark(), Watermark::at(20));
 
-    let before = sessions.clone();
-    assert_eq!(sessions.insert(20), Err(Refusal::Late));
-    assert_eq!(sessions.insert(16), Err(Refusal::Late));
-    assert_eq!(sessions.insert(u64::MAX), Err(Refusal::Overflow));
-    assert_eq!(sessions.insert(u64::MAX - 4), Err(Refusal::Overflow));
-    assert_eq!(sessions.advance_watermark(19), Err(Refusal::Regressed));
-    assert_eq!(sessions, before);
-    assert_eq!(sessions.advance_watermark(20), Ok(Advancing::Repeated));
-    assert_eq!(sessions, before);
+    refuses(&mut sessions, Refusal::Late, |s| s.insert(20));
+    refuses(&mut sessions, Refusal::Late, |s| s.insert(16));
+    refuses(&mut sessions, Refusal::Overflow, |s| s.insert(u64::MAX));
+    refuses(&mut sessions, Refusal::Overflow, |s| s.insert(u64::MAX - 4));
+    refuses(&mut sessions, Refusal::Regressed, |s| {
+        s.advance_watermark(19)
+    });
+    assert_eq!(
+        unchanged(&mut sessions, |s| s.advance_watermark(20)),
+        Ok(Advancing::Repeated)
+    );
 
     assert_eq!(sessions.take_closed(), Some(session(0, 15)));
     assert_eq!(sessions.take_closed(), None);
@@ -206,11 +207,12 @@ fn out_of_order_bridge_merges_full_session_tables_without_losing_data() {
 fn a_covered_timestamp_is_honoured_while_its_session_is_held() {
     let mut sessions = filled::<2>(5, &[0, 5, 10]);
     let held = session(0, 10);
-    let before = sessions.clone();
     // Endpoints and interior alike: the boundaries already say so.
     for timestamp in [0, 5, 7, 10] {
-        assert_eq!(sessions.insert(timestamp), Ok(Inserting::Covered(held)));
-        assert_eq!(sessions, before);
+        assert_eq!(
+            unchanged(&mut sessions, |s| s.insert(timestamp)),
+            Ok(Inserting::Covered(held))
+        );
     }
     assert_eq!(Inserting::Covered(held).session(), held);
 
@@ -218,18 +220,18 @@ fn a_covered_timestamp_is_honoured_while_its_session_is_held() {
     assert_eq!(sessions.advance_watermark(7), Ok(Advancing::Advanced));
     assert_eq!(sessions.insert(5), Ok(Inserting::Covered(held)));
     assert_eq!(sessions.advance_watermark(15), Ok(Advancing::Advanced));
-    let before = sessions.clone();
-    assert_eq!(sessions.insert(5), Ok(Inserting::Covered(held)));
-    assert_eq!(sessions.insert(10), Ok(Inserting::Covered(held)));
+    for timestamp in [5, 10] {
+        assert_eq!(
+            unchanged(&mut sessions, |s| s.insert(timestamp)),
+            Ok(Inserting::Covered(held))
+        );
+    }
     // Outside the boundaries a late event would have to move them: refused.
-    assert_eq!(sessions.insert(11), Err(Refusal::Late));
-    assert_eq!(sessions, before);
+    refuses(&mut sessions, Refusal::Late, |s| s.insert(11));
 
     // Drained: no history is kept, so the same replay is now late.
     assert_eq!(sessions.take_closed(), Some(held));
-    let before = sessions.clone();
-    assert_eq!(sessions.insert(5), Err(Refusal::Late));
-    assert_eq!(sessions, before);
+    refuses(&mut sessions, Refusal::Late, |s| s.insert(5));
 }
 
 #[test]

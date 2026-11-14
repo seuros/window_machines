@@ -1,9 +1,10 @@
 use std::cell::RefCell;
 
-use magnus::{Error, RModule, Ruby, Symbol, function, method, prelude::*, typed_data::Obj};
+use magnus::{Error, RModule, Ruby, Symbol, Value, function, method, prelude::*, typed_data::Obj};
+use matryona_machines::ruby::integer;
 use window_machines::Watermark;
 
-use crate::{Interval, Tick, advancing};
+use crate::{advancing, interval};
 
 #[magnus::wrap(class = "WindowMachines::Watermark", free_immediately, size)]
 pub struct Wrapper(RefCell<Watermark>);
@@ -17,13 +18,14 @@ impl Wrapper {
         Self::holding(Watermark::default())
     }
 
-    const fn at(value: Tick) -> Self {
-        Self::holding(Watermark::at(value.0))
+    fn at(value: Value) -> Result<Self, Error> {
+        Ok(Self::holding(Watermark::at(integer(value, "value")?)))
     }
 
-    fn advance(ruby: &Ruby, this: Obj<Self>, value: Tick) -> Result<Symbol, Error> {
+    fn advance(ruby: &Ruby, this: Obj<Self>, value: Value) -> Result<Symbol, Error> {
         this.check_frozen()?;
-        let outcome = this.0.borrow_mut().advance(value.0);
+        let value = integer(value, "value")?;
+        let outcome = this.0.borrow_mut().advance(value);
         Ok(advancing(ruby, outcome))
     }
 
@@ -31,8 +33,15 @@ impl Wrapper {
         self.0.borrow().value()
     }
 
-    fn closes(&self, window: Interval, allowed_lateness: Tick) -> bool {
-        self.0.borrow().closes(window.0, allowed_lateness.0)
+    fn closes(
+        ruby: &Ruby,
+        this: &Self,
+        window: Value,
+        allowed_lateness: Value,
+    ) -> Result<bool, Error> {
+        let window = interval(ruby, window)?;
+        let lateness = integer(allowed_lateness, "allowed_lateness")?;
+        Ok(this.0.borrow().closes(window, lateness))
     }
 }
 

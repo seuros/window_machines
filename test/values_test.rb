@@ -137,6 +137,57 @@ class ValuesTest < Minitest::Test
     assert_equal 1, t.size
   end
 
+  # A singleton class opened on a genuine value does not change what it is:
+  # every native read accepts it, a clone of one included.
+  def test_an_opened_singleton_class_is_still_the_gems_value
+    window = W::Window.new(0, 10).tap(&:singleton_class)
+    assert W::Watermark.at(10).closes?(window, 0)
+    assert W::Watermark.at(10).closes?(window.clone, 0)
+    held = W::Session.new(3, 5).tap(&:singleton_class)
+    assert held.covers?(4)
+    assert_equal held, W::Opened.new(held).session
+  end
+
+  # Members are read from the struct itself: a redefined reader never runs.
+  def test_a_redefined_reader_is_ignored
+    window = W::Window.new(0, 10)
+    session = W::Session.new(3, 5)
+    raising_readers(W::Window => %i[start end], W::Session => %i[first last]) do
+      assert W::Watermark.at(10).closes?(window, 0)
+      refute W::Watermark.at(9).closes?(window, 0)
+      assert session.covers?(4)
+      refute session.covers?(6)
+      assert_raises(IOError) { session.first }
+      assert_equal [3, 5], W::Opened.new(session).session.deconstruct
+    end
+  end
+
+  # Replaces each listed reader with one that raises, for the block.
+  def raising_readers(readers)
+    readers.each do |klass, names|
+      names.each do |name|
+        klass.alias_method(:"__original_#{name}", name)
+        klass.define_method(name) { raise IOError, "#{name} ran" }
+      end
+    end
+    yield
+  ensure
+    readers.each do |klass, names|
+      names.each do |name|
+        klass.alias_method(name, :"__original_#{name}")
+        klass.remove_method(:"__original_#{name}")
+      end
+    end
+  end
+
+  def test_the_extension_alone_is_a_name_error
+    lib = File.expand_path('../lib', __dir__)
+    script = 'begin; require "window_machines_native/window_machines_native"; ' \
+             'rescue NameError => e; print e.class; end'
+    output = IO.popen([RbConfig.ruby, '-I', lib, '-e', script], err: %i[child out], &:read)
+    assert_equal 'NameError', output
+  end
+
   def test_value_classes_are_resolved_at_load
     original = W.send(:remove_const, :Session)
     W.const_set(:Session, Data.define(:first, :last))

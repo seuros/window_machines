@@ -103,6 +103,8 @@ class WindowMachinesTest < Minitest::Test
     w.freeze
     assert_raises(FrozenError) { w.advance(11) }
     assert_raises(FrozenError) { w.advance(8) }
+    # Frozen is checked before the argument is read.
+    (BAD_TYPES + BAD_RANGES).each { |bad| assert_raises(FrozenError) { w.advance(bad) } }
     assert_equal 8, w.value
     assert w.closes?(window(0, 8), 0)
   end
@@ -191,6 +193,10 @@ class WindowMachinesTest < Minitest::Test
     assert_raises(FrozenError) { s.advance_watermark(26) }
     assert_raises(FrozenError) { s.insert(30) }
     assert_raises(FrozenError) { s.insert(1) }
+    (BAD_TYPES + BAD_RANGES).each do |bad|
+      assert_raises(FrozenError) { s.insert(bad) }
+      assert_raises(FrozenError) { s.advance_watermark(bad) }
+    end
     assert_equal [1, nil], [s.size, s.watermark.value]
   end
 end

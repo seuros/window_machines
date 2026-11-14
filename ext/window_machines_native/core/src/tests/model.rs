@@ -1,21 +1,9 @@
 //! Random operation streams checked against a naive model.
 use super::*;
+use matryona_machines::testing::XorShift64;
 use std::vec::Vec;
 
 type Spans = Vec<(u128, u128)>;
-
-struct Draws(u64);
-impl Draws {
-    const fn next(&mut self) -> u64 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 7;
-        self.0 ^= self.0 << 17;
-        self.0
-    }
-    const fn below(&mut self, bound: u64) -> u64 {
-        self.next() % bound
-    }
-}
 
 /// Naive model: an unordered list of spans compared with wide arithmetic,
 /// rebuilt from scratch on every insert, so it shares no slot or merge logic.
@@ -98,7 +86,7 @@ enum Answer {
 
 fn run_model(seed: u64, gap: u64, base: u64, spread: u64) {
     const N: usize = 5;
-    let mut draws = Draws(seed);
+    let mut draws = XorShift64::new(seed);
     let mut sessions = Sessions::<N>::new(nz(gap));
     let mut model = Model {
         spans: Vec::new(),

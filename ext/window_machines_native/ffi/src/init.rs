@@ -1,4 +1,4 @@
-use magnus::{Error, RClass, Ruby, function, method, prelude::*};
+use magnus::{Error, Ruby, function, method, prelude::*};
 
 #[magnus::init]
 fn init(ruby: &Ruby) -> Result<(), Error> {
@@ -11,7 +11,7 @@ fn init(ruby: &Ruby) -> Result<(), Error> {
     module.define_singleton_method("__window", function!(crate::validate_window, 2))?;
     module.define_singleton_method("__session", function!(crate::validate_session, 2))?;
     module.define_singleton_method("__inserting", function!(crate::validate_inserting, 1))?;
-    let session: RClass = module.const_get("Session")?;
+    let session = crate::classes::classes(ruby)?.session.get(ruby);
     session.define_method("covers?", method!(crate::session_covers, 1))?;
     crate::watermark::define(ruby, module)?;
     crate::sessions::define(ruby, module)

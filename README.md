@@ -201,20 +201,24 @@ sessions.insert(24)       # => :late, that session is gone and nothing remembers
 - **Refusals don't raise.** `:overflow`, `:undersized`, `:regressed`, `:late` and `:full` are answers, each with its own symbol and no catch-all, and a refused call changes nothing. Only malformed input raises.
 - **Every answer, by method.**
 
-  | Method | Honoured | Refused |
-  | --- | --- | --- |
-  | `WindowMachines.tumbling(timestamp, width)` | a `Window` | `:overflow` |
-  | `WindowMachines.sliding(timestamp, size, slide)` | an Array of `Window`, newest first, `[]` in a hole | `:overflow`, `:undersized` |
-  | `Watermark#advance(value)` | `:advanced`, or `:repeated` when it already held `value` | `:regressed` |
-  | `Watermark#closes?(window, allowed_lateness)` | `true` or `false` | never refuses |
-  | `Sessions#insert(timestamp)` | `Opened`, `Extended`, or `Covered` when a held session already covers it | `:late`, `:overflow`, `:full` |
-  | `Sessions#advance_watermark(value)` | `:advanced`, or `:repeated` when it already held `value` | `:regressed` |
-  | `Sessions#take_closed` | a `Session`, `nil` when none is closed | never refuses |
+  | Method | Honoured | Refused | Records the clock |
+  | --- | --- | --- | --- |
+  | `WindowMachines.tumbling(timestamp, width)` | a `Window` | `:overflow` | no clock, nothing recorded |
+  | `WindowMachines.sliding(timestamp, size, slide)` | an Array of `Window`, newest first, `[]` in a hole | `:overflow`, `:undersized` | no clock, nothing recorded |
+  | `Window.new(start, end)`, `Session.new(first, last)` | the value | never refuses; an invalid value raises `RangeError` | no clock, nothing recorded |
+  | `Session#covers?(timestamp)` | `true` or `false` | never refuses | no clock, nothing recorded |
+  | `Watermark#advance(value)` | `:advanced`, or `:repeated` when it already held `value` | `:regressed` | no clock; `:advanced` records the watermark, `:repeated` nothing |
+  | `Watermark#closes?(window, allowed_lateness)` | `true` or `false` | never refuses | no clock, nothing recorded |
+  | `Sessions#insert(timestamp)` | `Opened`, `Extended`, or `Covered` when a held session already covers it | `:late`, `:overflow`, `:full` | no clock, nothing recorded |
+  | `Sessions#advance_watermark(value)` | `:advanced`, or `:repeated` when it already held `value` | `:regressed` | no clock; `:advanced` records the watermark, `:repeated` nothing |
+  | `Sessions#take_closed` | a `Session`, `nil` when none is closed | never refuses | no clock, nothing recorded |
 - **Repeats are honoured when they can be proven.** A watermark repeated at its own value is `:repeated`. A timestamp inside a held session is `Covered`, even below the watermark. Once `take_closed` drained the session there is no history left to prove it with, and the same timestamp is `:late`.
 - **`:overflow` means past the end of event time.** A window whose end, or a session whose `last + gap`, would exceed `2**64-1` is refused.
 - **Sliding answers at most 32 windows** (`WindowMachines::CAPACITY`). More is `:undersized`, never a truncated list.
 - **Sessions hold at most 32 sessions at once**, closed-but-undrained ones included. A 33rd that joins none of them is `:full` and nothing is dropped to make room. Advance the watermark and drain first.
-- **Values mirror the core.** `Window(start, end)`, `Session(first, last)`, `Opened`/`Extended`/`Covered(session)` are frozen `Data`. `closes?` takes a `Window`; loose Integers or an Array in its place raise.
+- **Values mirror the core, and are valid or do not exist.** `Window(start, end)`, `Session(first, last)`, `Opened`/`Extended`/`Covered(session)` are frozen `Data`, checked by the core when built, by hand or by the gem, `with` included. `Window.new(20, 10)` and `Window.new(10, 10)` raise `RangeError` (a window holds at least one timestamp); `Session.new(5, 3)` raises `RangeError`; a non-Integer raises `TypeError`, and so does an `Opened`/`Extended`/`Covered` holding anything but a `Session`. `closes?` takes a `Window`; loose Integers or an Array in its place raise `TypeError`. Every value class is sealed: `allocate` is gone and subclassing raises `TypeError`. Sealing stops accidents, not reflection (a named `class X < Session` still binds its constant, `Data#initialize` can be bound directly, `Marshal.load` skips `initialize`), so the native side is the authority: `closes?`, `covers?` and the `Opened`/`Extended`/`Covered` constructors accept only an instance of exactly `Window` or `Session` (`TypeError` otherwise), read its members without calling any method, and check them through the core again (`RangeError` for an invalid one). The classes are resolved once when the gem loads; swapping a constant later changes nothing the gem builds or accepts.
+- **A call that raises changed nothing.** `insert` and `take_closed` build their answer before the tracker keeps the change, so if building it raises the event was not inserted and the closed session is still there to take. If building it changed the tracker (a redefined `Opened.new` or `Session.new` calling back in), the outer call raises `RuntimeError`, is not applied, and that inner change stands. If building it froze the tracker, the call raises `FrozenError` and is not applied.
+- **No clock is recorded.** Everything here is event time you pass in; nothing reads or records a monotonic clock. The only progress kept is the watermark, which `advance`/`advance_watermark` record on `:advanced` and leave alone on `:repeated` or `:regressed`.
 - **Nothing here issues ids or survives a restart by itself.** There are no handles and no scopes. To resume, rebuild a watermark with `Watermark.at(saved_value)`; sessions are rebuilt by re-inserting.
 - **Frozen means frozen.** `freeze` a watermark or a sessions tracker and every mutating call (`advance`, `insert`, `advance_watermark`, `take_closed`) raises `FrozenError`, repeats included.
 

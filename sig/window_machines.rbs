@@ -19,7 +19,12 @@ module WindowMachines
   # Refused: :overflow, and :undersized past CAPACITY windows.
   def self.sliding: (Integer timestamp, Integer size, Integer slide) -> (Array[Window] | :overflow | :undersized)
 
-  # Mirrors the core's `Window`.
+  # Every value class is sealed: no `allocate`, subclassing raises TypeError.
+  # The native side accepts only instances of exactly these classes and
+  # re-validates their members through the core.
+
+  # Mirrors the core's `Window`, validated by `Window::new`: TypeError unless
+  # both are Integers, RangeError outside 0..2**64-1 or unless start < end.
   class Window < Data
     attr_reader start: Integer
     attr_reader end: Integer
@@ -27,17 +32,20 @@ module WindowMachines
                 | (start: Integer, end: Integer) -> Window
   end
 
-  # Mirrors the core's `Session`.
+  # Mirrors the core's `Session`, validated by `Session::new`: TypeError unless
+  # both are Integers, RangeError outside 0..2**64-1 or unless first <= last.
   class Session < Data
     attr_reader first: Integer
     attr_reader last: Integer
     def self.new: (Integer first, Integer last) -> Session
                 | (first: Integer, last: Integer) -> Session
-    # The core's `covers`.
+    # The core's `covers`. TypeError for a receiver that is not exactly a
+    # Session, RangeError for one whose members the core refuses.
     def covers?: (Integer timestamp) -> bool
   end
 
-  # `Inserting::Opened`.
+  # `Inserting::Opened`. Opened, Extended and Covered raise TypeError unless
+  # `session` is exactly a Session, RangeError for one the core refuses.
   class Opened < Data
     attr_reader session: Session
     def self.new: (Session session) -> Opened
@@ -68,7 +76,8 @@ module WindowMachines
     def advance: (Integer value) -> (advancing | :regressed)
     # nil before the first observation.
     def value: () -> Integer?
-    # A pure query: never refuses.
+    # A pure query: never refuses. TypeError unless `window` is exactly a
+    # Window, RangeError for one whose members the core refuses.
     def closes?: (Window window, Integer allowed_lateness) -> bool
   end
 
@@ -83,11 +92,15 @@ module WindowMachines
     def watermark: () -> Watermark
     # Honoured: Opened, Extended, and Covered when a held session already
     # covers `timestamp` (nothing changes). Refused: :late, :overflow, :full.
+    # FrozenError if building the answer froze the tracker, RuntimeError if it
+    # changed it; nothing applied either way.
     def insert: (Integer timestamp) -> (inserting | :late | :overflow | :full)
     # Honoured: :advanced, and :repeated when it already held exactly `value`
     # (nothing changes). Refused: :regressed.
     def advance_watermark: (Integer value) -> (advancing | :regressed)
     # The earliest closed session, nil when none is closed. Never refuses.
+    # FrozenError if building the session froze the tracker, RuntimeError if
+    # it changed it; nothing taken either way.
     def take_closed: () -> Session?
   end
 end

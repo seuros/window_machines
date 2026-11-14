@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used)]
 extern crate std;
 use super::*;
 
@@ -8,13 +7,37 @@ fn nz(x: u64) -> NonZeroU64 {
     NonZeroU64::new(x).expect("positive")
 }
 const fn window(start: u64, end: u64) -> Window {
-    Window { start, end }
+    Window::new(start, end).expect("start < end")
 }
 const fn session(first: u64, last: u64) -> Session {
-    Session { first, last }
+    Session::new(first, last).expect("first <= last")
 }
-/// A buffer no real window equals, to prove what a call left untouched.
-const MARK: Window = window(77, 7);
+/// A tracker with `gap` that honoured an insert of every timestamp given.
+fn filled<const N: usize>(gap: u64, timestamps: &[u64]) -> Sessions<N> {
+    let mut sessions = Sessions::new(nz(gap));
+    for &timestamp in timestamps {
+        assert!(sessions.insert(timestamp).is_ok());
+    }
+    sessions
+}
+/// A buffer no real window equals (`Window::new` refuses it), to prove what a
+/// call left untouched.
+const MARK: Window = Window { start: 77, end: 7 };
+
+#[test]
+fn values_are_valid_or_do_not_exist() {
+    assert_eq!(Window::new(20, 10), None);
+    assert_eq!(Window::new(10, 10), None);
+    let found = window(10, 20);
+    assert_eq!((found.start(), found.end()), (10, 20));
+    assert_eq!(Window::new(0, u64::MAX).map(Window::end), Some(u64::MAX));
+    assert_eq!(Session::new(5, 3), None);
+    let held = session(3, 5);
+    assert_eq!((held.first(), held.last()), (3, 5));
+    assert_eq!(Session::new(7, 7).map(Session::first), Some(7));
+    assert!(held.covers(3) && held.covers(5));
+    assert!(!held.covers(2) && !held.covers(6));
+}
 
 #[test]
 fn tumbling_boundaries_are_half_open_and_overflow_is_refused() {
@@ -31,24 +54,24 @@ fn tumbling_boundaries_are_half_open_and_overflow_is_refused() {
 
 #[test]
 fn sliding_writes_the_first_n_newest_first_and_leaves_the_rest() {
-    let mut out = [MARK; 4];
-    assert_eq!(sliding(10, nz(10), nz(5), &mut out), Ok(2));
-    assert_eq!(out, [window(10, 20), window(5, 15), MARK, MARK]);
-    // Windows never start below zero.
-    let mut out = [MARK; 4];
-    assert_eq!(sliding(0, nz(10), nz(5), &mut out), Ok(1));
-    assert_eq!(out, [window(0, 10), MARK, MARK, MARK]);
-    let mut out = [MARK; 4];
-    assert_eq!(sliding(7, nz(20), nz(5), &mut out), Ok(2));
-    assert_eq!(out[..2], [window(5, 25), window(0, 20)]);
-    // A slide wider than the size leaves holes: nothing contains 12.
-    let mut out = [MARK; 2];
-    assert_eq!(sliding(12, nz(1), nz(5), &mut out), Ok(0));
-    assert_eq!(out, [MARK; 2]);
-    assert_eq!(sliding(12, nz(1), nz(5), &mut []), Ok(0));
-    // An exactly sized buffer is enough.
-    let mut out = [MARK; 2];
-    assert_eq!(sliding(10, nz(10), nz(5), &mut out), Ok(2));
+    // (timestamp, size, slide, buffer length, windows written)
+    let cases: [(u64, u64, u64, usize, &[Window]); 5] = [
+        (10, 10, 5, 4, &[window(10, 20), window(5, 15)]),
+        // An exactly sized buffer is enough.
+        (10, 10, 5, 2, &[window(10, 20), window(5, 15)]),
+        // Windows never start below zero.
+        (0, 10, 5, 4, &[window(0, 10)]),
+        (7, 20, 5, 4, &[window(5, 25), window(0, 20)]),
+        // A slide wider than the size leaves holes: nothing contains 12.
+        (12, 1, 5, 0, &[]),
+    ];
+    for (timestamp, size, slide, len, expected) in cases {
+        let mut out = [MARK; 4];
+        let written = sliding(timestamp, nz(size), nz(slide), &mut out[..len]);
+        assert_eq!(written, Ok(expected.len()));
+        assert_eq!(out[..expected.len()], *expected);
+        assert!(out[expected.len()..].iter().all(|slot| *slot == MARK));
+    }
 }
 
 #[test]
@@ -128,12 +151,10 @@ fn watermark_advances_repeats_and_refuses_regression() {
     // A closing point past the end of event time is never reached.
     assert!(!watermark.closes(window(0, 10), u64::MAX));
     assert!(watermark.closes(window(0, u64::MAX), 0));
-    // Only the end is read; a malformed window is the caller's.
-    assert!(watermark.closes(window(9, 3), 0));
-}
+    // Only the end is read, the placeholder's too.
+    assert!(watermark.closes(Window::default(), 0));
 
-#[test]
-fn a_watermark_built_at_a_value_equals_one_advanced_to_it() {
+    // Built at a value: equal to one advanced to it, and held to it.
     let mut advanced = Watermark::default();
     assert_eq!(advanced.advance(0), Ok(Advancing::Advanced));
     assert_eq!(Watermark::at(0), advanced);
@@ -183,10 +204,7 @@ fn out_of_order_bridge_merges_full_session_tables_without_losing_data() {
 
 #[test]
 fn a_covered_timestamp_is_honoured_while_its_session_is_held() {
-    let mut sessions = Sessions::<2>::new(nz(5));
-    for timestamp in [0, 5, 10] {
-        assert!(sessions.insert(timestamp).is_ok());
-    }
+    let mut sessions = filled::<2>(5, &[0, 5, 10]);
     let held = session(0, 10);
     let before = sessions.clone();
     // Endpoints and interior alike: the boundaries already say so.
@@ -216,9 +234,7 @@ fn a_covered_timestamp_is_honoured_while_its_session_is_held() {
 
 #[test]
 fn a_full_table_still_honours_covered_and_joining_events() {
-    let mut sessions = Sessions::<2>::new(nz(1));
-    assert_eq!(sessions.insert(0), Ok(Inserting::Opened(session(0, 0))));
-    assert_eq!(sessions.insert(10), Ok(Inserting::Opened(session(10, 10))));
+    let mut sessions = filled::<2>(1, &[0, 10]);
     assert_eq!(
         sessions.insert(11),
         Ok(Inserting::Extended(session(10, 11)))
@@ -230,10 +246,7 @@ fn a_full_table_still_honours_covered_and_joining_events() {
 
 #[test]
 fn closed_sessions_drain_earliest_first_and_only_when_asked() {
-    let mut sessions = Sessions::<3>::new(nz(2));
-    for timestamp in [20, 0, 10] {
-        assert!(sessions.insert(timestamp).is_ok());
-    }
+    let mut sessions = filled::<3>(2, &[20, 0, 10]);
     assert_eq!(sessions.take_closed(), None);
     assert_eq!(sessions.advance_watermark(11), Ok(Advancing::Advanced));
     assert_eq!(sessions.len(), 3);
@@ -246,7 +259,7 @@ fn closed_sessions_drain_earliest_first_and_only_when_asked() {
 }
 
 #[test]
-fn refusals_display_and_defaults_are_placeholders() {
+fn refusals_display_distinctly() {
     use std::string::ToString;
     let all = [
         Refusal::Overflow,
@@ -260,8 +273,4 @@ fn refusals_display_and_defaults_are_placeholders() {
         assert_ne!(error.to_string(), "");
         assert!(all[..index].iter().all(|other| other != refusal));
     }
-    assert_eq!(Window::default(), window(0, 0));
-    assert_eq!(Session::default(), session(0, 0));
-    assert!(session(3, 5).covers(3) && session(3, 5).covers(5));
-    assert!(!session(3, 5).covers(2) && !session(3, 5).covers(6));
 }

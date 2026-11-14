@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use magnus::{Error, RModule, Ruby, Symbol, Value, function, method, prelude::*, typed_data::Obj};
 use window_machines::{Inserting, Sessions};
 
-use crate::{CAPACITY, Span, Tick, advancing, data, refusal, session, watermark};
+use crate::{CAPACITY, Span, Tick, advancing, classes, on_copy, refusal, session, watermark};
 
 #[magnus::wrap(class = "WindowMachines::Sessions", free_immediately, size)]
 struct Wrapper(RefCell<Sessions<CAPACITY>>);
@@ -34,19 +34,20 @@ impl Wrapper {
         watermark::Wrapper::holding(self.0.borrow().watermark())
     }
 
+    /// Answers through [`on_copy`]: a raise while building the answer changes
+    /// nothing, a freeze meanwhile raises `FrozenError`, a re-entrant change
+    /// `RuntimeError`.
     fn insert(ruby: &Ruby, this: Obj<Self>, timestamp: Tick) -> Result<Value, Error> {
-        this.check_frozen()?;
-        // Resolve the class before inserting, so a failure changes nothing.
-        let class = data(ruby, "Session")?;
-        // No Ruby allocation while a RefCell guard is alive.
-        let outcome = this.0.borrow_mut().insert(timestamp.0);
-        let (name, held) = match outcome {
-            Ok(Inserting::Opened(held)) => ("Opened", held),
-            Ok(Inserting::Extended(held)) => ("Extended", held),
-            Ok(Inserting::Covered(held)) => ("Covered", held),
-            Err(refused) => return Ok(ruby.to_symbol(refusal(refused)).as_value()),
-        };
-        data(ruby, name)?.funcall("new", (session(class, held)?,))
+        let known = classes::classes(ruby)?;
+        on_copy(ruby, this, &this.0, |next| {
+            let (class, held) = match next.insert(timestamp.0) {
+                Ok(Inserting::Opened(held)) => (known.opened, held),
+                Ok(Inserting::Extended(held)) => (known.extended, held),
+                Ok(Inserting::Covered(held)) => (known.covered, held),
+                Err(refused) => return Ok(refusal(ruby, refused)),
+            };
+            classes::build(ruby, class, (session(ruby, held)?,))
+        })
     }
 
     fn advance_watermark(ruby: &Ruby, this: Obj<Self>, value: Tick) -> Result<Symbol, Error> {
@@ -55,12 +56,16 @@ impl Wrapper {
         Ok(advancing(ruby, outcome))
     }
 
+    /// Answers through [`on_copy`]: a raise while building the session
+    /// leaves it held, to be taken again; a freeze meanwhile raises
+    /// `FrozenError`, a re-entrant change `RuntimeError`.
     fn take_closed(ruby: &Ruby, this: Obj<Self>) -> Result<Option<Value>, Error> {
-        this.check_frozen()?;
-        // Resolve the class before draining, so a failure loses nothing.
-        let class = data(ruby, "Session")?;
-        let closed = this.0.borrow_mut().take_closed();
-        closed.map(|closed| session(class, closed)).transpose()
+        classes::classes(ruby)?;
+        on_copy(ruby, this, &this.0, |next| {
+            next.take_closed()
+                .map(|closed| session(ruby, closed))
+                .transpose()
+        })
     }
 }
 

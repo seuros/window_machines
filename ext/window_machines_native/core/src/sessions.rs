@@ -1,17 +1,38 @@
 use crate::{Advancing, Refusal, Watermark};
 use core::num::NonZeroU64;
 
-/// Boundaries of a session; both endpoints are actual included event timestamps.
+/// Boundaries of a session; both endpoints are actual included event
+/// timestamps, so `first <= last`.
 ///
 /// The `Default` value is a placeholder, not a sentinel.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Session {
-    /// Earliest event.
-    pub first: u64,
-    /// Latest event.
-    pub last: u64,
+    first: u64,
+    last: u64,
 }
 impl Session {
+    /// The session from `first` to `last`, or `None` unless `first <= last`.
+    #[must_use]
+    pub const fn new(first: u64, last: u64) -> Option<Self> {
+        if first <= last {
+            Some(Self { first, last })
+        } else {
+            None
+        }
+    }
+
+    /// Earliest event.
+    #[must_use]
+    pub const fn first(self) -> u64 {
+        self.first
+    }
+
+    /// Latest event.
+    #[must_use]
+    pub const fn last(self) -> u64 {
+        self.last
+    }
+
     /// Whether the timestamp lies between the two endpoints, inclusive.
     #[must_use]
     pub const fn covers(self, timestamp: u64) -> bool {

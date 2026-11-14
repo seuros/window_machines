@@ -8,16 +8,40 @@ mod sessions;
 pub use refusal::Refusal;
 pub use sessions::{Inserting, Session, Sessions};
 
-/// Half-open event-time interval `[start, end)`.
+/// Half-open event-time interval `[start, end)`, never empty: `start < end`.
 ///
-/// The `Default` value is an output-buffer placeholder (`[Window::default(); N]`).
-/// It is not a sentinel: read only the entries a call reports.
+/// Built by [`Window::new`], [`tumbling`] or [`sliding`]. The `Default` value
+/// is an output-buffer placeholder (`[Window::default(); N]`), the one value
+/// that is not an interval. It is not a sentinel: read only the entries a call
+/// reports.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Window {
+    start: u64,
+    end: u64,
+}
+impl Window {
+    /// The interval `[start, end)`, or `None` unless `start < end`: an interval
+    /// that holds no timestamp is not a window.
+    #[must_use]
+    pub const fn new(start: u64, end: u64) -> Option<Self> {
+        if start < end {
+            Some(Self { start, end })
+        } else {
+            None
+        }
+    }
+
     /// Inclusive start.
-    pub start: u64,
+    #[must_use]
+    pub const fn start(self) -> u64 {
+        self.start
+    }
+
     /// Exclusive end.
-    pub end: u64,
+    #[must_use]
+    pub const fn end(self) -> u64 {
+        self.end
+    }
 }
 
 /// Zero-aligned tumbling window containing this event.

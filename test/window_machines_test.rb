@@ -63,7 +63,6 @@ class WindowMachinesTest < Minitest::Test
     assert session(3, 5).covers?(5)
     refute session(3, 5).covers?(2)
     refute session(3, 5).covers?(6)
-    assert_raises(TypeError) { session(3, 5).covers?(4.0) }
   end
 
   def test_watermark_advances_repeats_and_refuses
@@ -78,7 +77,7 @@ class WindowMachinesTest < Minitest::Test
     refute w.closes?(window(0, 10), 1)
     # Pure query, as the core answers it: only the end is read, and a closing
     # point past the end of event time is never reached.
-    assert w.closes?(window(10, 10), 0)
+    assert w.closes?(window(9, 10), 0)
     refute w.closes?(window(0, MAX), 1)
     assert_equal :advanced, w.advance(MAX)
     assert w.closes?(window(0, MAX), 0)

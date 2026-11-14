@@ -73,10 +73,11 @@ impl Model {
 }
 
 fn narrow(span: (u128, u128)) -> Session {
-    Session {
-        first: u64::try_from(span.0).expect("fits"),
-        last: u64::try_from(span.1).expect("fits"),
-    }
+    Session::new(
+        u64::try_from(span.0).expect("fits"),
+        u64::try_from(span.1).expect("fits"),
+    )
+    .expect("first <= last")
 }
 
 /// Every held session, earliest first, read from a copy pushed to the end of
@@ -85,6 +86,14 @@ fn held<const N: usize>(sessions: &Sessions<N>) -> Vec<Session> {
     let mut copy = sessions.clone();
     assert!(copy.advance_watermark(u64::MAX).is_ok());
     core::iter::from_fn(|| copy.take_closed()).collect()
+}
+
+/// How a call left the tracker, checked against a clone taken before it.
+enum Answer {
+    Changed,
+    Repeated,
+    Refused,
+    Unchanged,
 }
 
 fn run_model(seed: u64, gap: u64, base: u64, spread: u64) {
@@ -103,22 +112,14 @@ fn run_model(seed: u64, gap: u64, base: u64, spread: u64) {
         let timestamp = base
             .max(near.saturating_sub(spread / 2))
             .saturating_add(draws.below(spread));
-        match draws.below(10) {
+        let answer = match draws.below(10) {
             0..=5 => {
                 let expected = model.insert(N, timestamp);
                 assert_eq!(sessions.insert(timestamp), expected);
                 match expected {
-                    Ok(Inserting::Opened(_) | Inserting::Extended(_)) => {
-                        assert_ne!(sessions, before);
-                    }
-                    Ok(Inserting::Covered(_)) => {
-                        repeated += 1;
-                        assert_eq!(sessions, before);
-                    }
-                    Err(Refusal::Late | Refusal::Overflow | Refusal::Full) => {
-                        refused += 1;
-                        assert_eq!(sessions, before);
-                    }
+                    Ok(Inserting::Opened(_) | Inserting::Extended(_)) => Answer::Changed,
+                    Ok(Inserting::Covered(_)) => Answer::Repeated,
+                    Err(Refusal::Late | Refusal::Overflow | Refusal::Full) => Answer::Refused,
                     Err(Refusal::Undersized | Refusal::Regressed) => {
                         panic!("insert never answers {expected:?}");
                     }
@@ -132,24 +133,38 @@ fn run_model(seed: u64, gap: u64, base: u64, spread: u64) {
                 };
                 assert_eq!(sessions.advance_watermark(timestamp), expected);
                 match expected {
-                    Ok(Advancing::Advanced) => model.watermark = Some(timestamp),
-                    Ok(Advancing::Repeated) => {
-                        repeated += 1;
-                        assert_eq!(sessions, before);
+                    Ok(Advancing::Advanced) => {
+                        model.watermark = Some(timestamp);
+                        Answer::Changed
                     }
-                    Err(_) => {
-                        refused += 1;
-                        assert_eq!(sessions, before);
-                    }
+                    Ok(Advancing::Repeated) => Answer::Repeated,
+                    Err(Refusal::Regressed) => Answer::Refused,
+                    Err(
+                        Refusal::Overflow | Refusal::Undersized | Refusal::Late | Refusal::Full,
+                    ) => panic!("advance_watermark never answers {expected:?}"),
                 }
             }
             _ => {
                 let expected = model.take_closed();
                 assert_eq!(sessions.take_closed(), expected);
-                if expected.is_none() {
-                    assert_eq!(sessions, before);
+                if expected.is_some() {
+                    Answer::Changed
+                } else {
+                    Answer::Unchanged
                 }
             }
+        };
+        match answer {
+            Answer::Changed => assert_ne!(sessions, before),
+            Answer::Repeated => {
+                repeated += 1;
+                assert_eq!(sessions, before);
+            }
+            Answer::Refused => {
+                refused += 1;
+                assert_eq!(sessions, before);
+            }
+            Answer::Unchanged => assert_eq!(sessions, before),
         }
         assert_eq!(sessions.watermark().value(), model.watermark);
         assert_eq!(sessions.len(), model.spans.len());

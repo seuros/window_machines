@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/seuros/window_machines/compare/window_machines/v0.4.0...window_machines/v0.4.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **deps:** require matryona-machines &gt;= 0.3 with symbols! tables for refusals and advancing ([055ad4d](https://github.com/seuros/window_machines/commit/055ad4d22456e4ab3dd940ed92cf5dc57941612d))
+
 ## [0.4.0](https://github.com/seuros/window_machines/compare/window_machines/v0.3.0...window_machines/v0.4.0) (2026-11-14)
 
 

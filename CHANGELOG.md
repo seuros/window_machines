@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/seuros/window_machines/compare/window_machines/v0.2.0...window_machines/v0.3.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* seal window values, check exact classes natively, re-check frozen before keeping
+
+### Features
+
+* seal window values, check exact classes natively, re-check frozen before keeping ([9a891df](https://github.com/seuros/window_machines/commit/9a891dfdb502048734b2a4db99823e800ff11e81))
+
 ## [0.2.0](https://github.com/seuros/window_machines/compare/window_machines/v0.1.4...window_machines/v0.2.0) (2026-11-13)
 
 

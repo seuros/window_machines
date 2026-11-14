@@ -6,7 +6,7 @@ mod watermark;
 
 use classes::classes;
 use magnus::{Error, Ruby, Symbol, Value, value::ReprValue};
-use matryona_machines::ruby::{integer, positive, symbol};
+use matryona_machines::ruby::{Symbols, integer, positive, symbol};
 use window_machines::{Advancing, Refusal, Session, Window};
 
 /// Sessions one tracker holds, and windows one `sliding` call can answer.
@@ -71,31 +71,32 @@ fn session_covers(ruby: &Ruby, this: Value, timestamp: Value) -> Result<bool, Er
     session_from(ruby, this).map(|session| session.covers(timestamp))
 }
 
-/// Ruby symbol name of a refusal: the snake case of the core variant.
-const fn refusal_name(refused: Refusal) -> &'static str {
-    match refused {
-        Refusal::Overflow => "overflow",
-        Refusal::Undersized => "undersized",
-        Refusal::Regressed => "regressed",
-        Refusal::Late => "late",
-        Refusal::Full => "full",
+matryona_machines::symbols! {
+    /// The core's refusals, each the snake case of its variant.
+    Refusals for Refusal as "a refusal" {
+        Overflow => "overflow",
+        Undersized => "undersized",
+        Regressed => "regressed",
+        Late => "late",
+        Full => "full",
+    }
+}
+
+matryona_machines::symbols! {
+    /// An honoured watermark advance.
+    Advancings for Advancing as "an advance" {
+        Advanced => "advanced",
+        Repeated => "repeated",
     }
 }
 
 fn advancing(ruby: &Ruby, outcome: Result<Advancing, Refusal>) -> Symbol {
-    symbol(
-        ruby,
-        match outcome {
-            Ok(Advancing::Advanced) => "advanced",
-            Ok(Advancing::Repeated) => "repeated",
-            Err(refused) => refusal_name(refused),
-        },
-    )
+    symbol(ruby, outcome.map_or_else(Refusals::name, Advancings::name))
 }
 
 /// The refusal symbol, as an answer.
 fn refusal(ruby: &Ruby, refused: Refusal) -> Value {
-    symbol(ruby, refusal_name(refused)).as_value()
+    Refusals::symbol(ruby, refused).as_value()
 }
 
 fn window(ruby: &Ruby, window: Window) -> Result<Value, Error> {

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/seuros/window_machines/compare/window_machines/v0.3.0...window_machines/v0.4.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* adopt matryona-machines 0.2 (exact_fields, frozen-first, missing_docs)
+
+### Features
+
+* adopt matryona-machines 0.2 (exact_fields, frozen-first, missing_docs) ([9ac31a3](https://github.com/seuros/window_machines/commit/9ac31a39d0a1138ea78fadb8a5ff3e65d33dda19))
+
 ## [0.3.0](https://github.com/seuros/window_machines/compare/window_machines/v0.2.0...window_machines/v0.3.0) (2026-11-14)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/seuros/window_machines/compare/window_machines/v0.4.3...window_machines/v0.4.4) (2026-11-16)
+
+
+### Bug Fixes
+
+* fix wrapped classes at load so building a value runs no Ruby ([1a7cbe5](https://github.com/seuros/window_machines/commit/1a7cbe5d4341935857f7c32a16b8cde42b37f091))
+
 ## [0.4.3](https://github.com/seuros/window_machines/compare/window_machines/v0.4.2...window_machines/v0.4.3) (2026-11-16)
 
 

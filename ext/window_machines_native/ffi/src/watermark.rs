@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use magnus::{Error, RModule, Ruby, Symbol, Value, function, method, prelude::*, typed_data::Obj};
-use matryona_machines::ruby::integer;
+use matryona_machines::ruby::{Class, integer};
 use window_machines::Watermark;
 
 use crate::{advancing, interval};
@@ -52,5 +52,6 @@ pub fn define(ruby: &Ruby, module: RModule) -> Result<(), Error> {
     class.define_singleton_method("at", function!(Wrapper::at, 1))?;
     class.define_method("advance", method!(Wrapper::advance, 1))?;
     class.define_method("value", method!(Wrapper::value, 0))?;
-    class.define_method("closes?", method!(Wrapper::closes, 2))
+    class.define_method("closes?", method!(Wrapper::closes, 2))?;
+    Class::pin_wrapped::<Wrapper>(ruby, class).map(drop)
 }

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use magnus::{Error, RModule, Ruby, Symbol, Value, function, method, prelude::*, typed_data::Obj};
-use matryona_machines::ruby::{integer, keep, positive};
+use matryona_machines::ruby::{Class, integer, keep, positive};
 use window_machines::{Inserting, Sessions};
 
 use crate::{CAPACITY, advancing, classes, refusal, session, watermark};
@@ -88,5 +88,6 @@ pub fn define(ruby: &Ruby, module: RModule) -> Result<(), Error> {
     class.define_method("watermark", method!(Wrapper::watermark, 0))?;
     class.define_method("insert", method!(Wrapper::insert, 1))?;
     class.define_method("advance_watermark", method!(Wrapper::advance_watermark, 1))?;
-    class.define_method("take_closed", method!(Wrapper::take_closed, 0))
+    class.define_method("take_closed", method!(Wrapper::take_closed, 0))?;
+    Class::pin_wrapped::<Wrapper>(ruby, class).map(drop)
 }

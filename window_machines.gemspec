@@ -6,9 +6,10 @@ Gem::Specification.new do |spec|
   spec.version = WindowMachines::VERSION
   spec.authors = ['Abdelkader Boudih']
   spec.email = ['oss@seuros.com']
-  spec.summary = 'Native event-time window boundaries for Ruby'
-  spec.description = 'Initial allocation-free window policy core and thin native Ruby binding. ' \
-                     'Caller owns payloads, clocks, and execution.'
+  spec.summary = 'Event-time windows, watermarks and sessions over a native Rust core'
+  spec.description = 'Assigns events to tumbling or sliding windows by their own timestamp, closes windows ' \
+                     'behind a watermark, and tracks gap-split sessions that merge when a late event bridges ' \
+                     'them. The caller owns payloads, clocks and execution.'
   spec.homepage = 'https://github.com/seuros/window_machines'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 4.0.0'

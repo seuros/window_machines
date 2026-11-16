@@ -157,17 +157,18 @@ impl<const N: usize> Sessions<N> {
         // Fixed point handles any slot order and transitive bridges.
         for _ in 0..N {
             let mut changed = false;
-            for (index, session) in self.entries.iter().enumerate() {
+            for (session, merged) in self.entries.iter().zip(merged.iter_mut()) {
                 let Some(session) = session else {
                     continue;
                 };
-                if !merged[index]
+                // Both sums widen two `u64`s into `u128`: they cannot overflow.
+                if !*merged
                     && u128::from(candidate.first)
                         <= u128::from(session.last) + u128::from(self.gap.get())
                     && u128::from(session.first)
                         <= u128::from(candidate.last) + u128::from(self.gap.get())
                 {
-                    merged[index] = true;
+                    *merged = true;
                     candidate.first = candidate.first.min(session.first);
                     candidate.last = candidate.last.max(session.last);
                     changed = true;
@@ -181,12 +182,15 @@ impl<const N: usize> Sessions<N> {
         let Some(slot) = joined.or_else(|| self.entries.iter().position(Option::is_none)) else {
             return Err(Refusal::Full);
         };
-        for (index, merged) in merged.into_iter().enumerate() {
-            if merged {
-                self.entries[index] = None;
+        // `slot` came from a position over these same `N` entries, so this
+        // pass always meets it; a merged slot other than `slot` is freed.
+        for (index, (entry, merged)) in self.entries.iter_mut().zip(merged).enumerate() {
+            if index == slot {
+                *entry = Some(candidate);
+            } else if merged {
+                *entry = None;
             }
         }
-        self.entries[slot] = Some(candidate);
         Ok(if joined.is_some() {
             Inserting::Extended(candidate)
         } else {
@@ -212,22 +216,18 @@ impl<const N: usize> Sessions<N> {
     /// `None` means nothing is closed yet, not a refusal.
     pub fn take_closed(&mut self) -> Option<Session> {
         let value = self.watermark.value()?;
-        let index = self
-            .entries
-            .iter()
-            .enumerate()
-            .filter_map(|(index, session)| {
-                session
-                    .filter(|session| {
-                        session
-                            .last
-                            .checked_add(self.gap.get())
-                            .is_some_and(|end| value >= end)
-                    })
-                    .map(|session| (index, session.first))
+        let gap = self.gap.get();
+        self.entries
+            .iter_mut()
+            .filter(|entry| {
+                entry.is_some_and(|session| {
+                    session
+                        .last
+                        .checked_add(gap)
+                        .is_some_and(|end| value >= end)
+                })
             })
-            .min_by_key(|&(_, first)| first)
-            .map(|(index, _)| index)?;
-        self.entries[index].take()
+            .min_by_key(|entry| entry.map(|session| session.first))?
+            .take()
     }
 }

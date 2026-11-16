@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(not(test), deny(clippy::indexing_slicing))]
 #![doc = include_str!("../README.md")]
 use core::num::NonZeroU64;
 
@@ -51,6 +52,7 @@ impl Window {
 /// # Errors
 /// [`Refusal::Overflow`] when the window's end would pass `u64::MAX`.
 pub const fn tumbling(timestamp: u64, width: NonZeroU64) -> Result<Window, Refusal> {
+    // `width` is non-zero and the remainder never exceeds `timestamp`.
     let start = timestamp - timestamp % width.get();
     match start.checked_add(width.get()) {
         Some(end) => Ok(Window { start, end }),
@@ -76,6 +78,9 @@ pub fn sliding(
     out: &mut [Window],
 ) -> Result<usize, Refusal> {
     let (size, slide) = (size.get(), slide.get());
+    // `slide` is non-zero and `offset <= timestamp`; `size > offset` is
+    // checked before `size - offset - 1`, and `newest + size` (the largest
+    // end below) is checked before the loop.
     let offset = timestamp % slide;
     let newest = timestamp - offset;
     if size <= offset {
@@ -93,7 +98,7 @@ pub fn sliding(
         .filter(|count| *count <= out.len())
         .ok_or(Refusal::Undersized)?;
     let mut start = newest;
-    for slot in &mut out[..count] {
+    for slot in out.iter_mut().take(count) {
         *slot = Window {
             start,
             end: start + size,

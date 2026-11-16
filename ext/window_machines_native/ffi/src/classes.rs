@@ -7,7 +7,7 @@
 //! are read natively (no method is dispatched) and the caller re-validates
 //! them through the core constructor.
 use magnus::{Error, RModule, Ruby, Value, prelude::*};
-use matryona_machines::ruby::{Class, Registry, exact_fields};
+use matryona_machines::ruby::{Class, exact_fields};
 
 /// `WindowMachines::Window`, `Session`, `Opened`, `Extended` and `Covered`.
 pub struct Classes {
@@ -18,7 +18,11 @@ pub struct Classes {
     pub covered: Class,
 }
 
-static CLASSES: Registry<Classes> = Registry::new("window_machines");
+matryona_machines::registry! {
+    static CLASSES: Classes = "window_machines";
+    /// The classes resolved at init.
+    pub fn classes;
+}
 
 /// Resolve and pin the classes Ruby defined before loading the extension.
 pub fn resolve(ruby: &Ruby, module: RModule) -> Result<(), Error> {
@@ -31,11 +35,6 @@ pub fn resolve(ruby: &Ruby, module: RModule) -> Result<(), Error> {
         covered: class("Covered")?,
     };
     CLASSES.set(ruby, classes).map(drop)
-}
-
-/// The classes resolved at init.
-pub fn classes(ruby: &Ruby) -> Result<&'static Classes, Error> {
-    CLASSES.get(ruby)
 }
 
 /// A new value of `class`, through its own `new` (so through its check).

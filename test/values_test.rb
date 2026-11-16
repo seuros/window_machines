@@ -164,20 +164,23 @@ class ValuesTest < Minitest::Test
 
   # Replaces each listed reader with one that raises, for the block.
   def raising_readers(readers)
-    readers.each do |klass, names|
-      names.each do |name|
-        klass.alias_method(:"__original_#{name}", name)
-        klass.define_method(name) { raise IOError, "#{name} ran" }
-      end
-    end
+    originals = readers.flat_map { |klass, names| names.map { [klass, it, klass.instance_method(it)] } }
+    originals.each { |klass, name, _| replace_method(klass, name, proc { raise IOError, "#{name} ran" }) }
     yield
   ensure
-    readers.each do |klass, names|
-      names.each do |name|
-        klass.alias_method(name, :"__original_#{name}")
-        klass.remove_method(:"__original_#{name}")
-      end
-    end
+    originals&.each { |klass, name, method| replace_method(klass, name, (method if method.owner == klass)) }
+  end
+
+  # Defines `name` on `klass` as `body` (removes it when `body` is nil),
+  # removing the method `klass` itself holds first. Ruby warns about the
+  # redefinition, deliberate here, so warnings are off for the swap alone.
+  def replace_method(klass, name, body)
+    verbose = $VERBOSE
+    $VERBOSE = nil
+    klass.remove_method(name) if klass.method_defined?(name, false) || klass.private_method_defined?(name, false)
+    klass.define_method(name, body) if body
+  ensure
+    $VERBOSE = verbose
   end
 
   def test_the_extension_alone_is_a_name_error

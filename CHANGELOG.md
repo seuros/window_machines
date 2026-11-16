@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/seuros/window_machines/compare/window_machines/v0.4.2...window_machines/v0.4.3) (2026-11-16)
+
+
+### Bug Fixes
+
+* drop slice indexing from the window core ([7f03bb9](https://github.com/seuros/window_machines/commit/7f03bb90791d681a37d24d69f0d8a574dcb1a438))
+
 ## [0.4.2](https://github.com/seuros/window_machines/compare/window_machines/v0.4.1...window_machines/v0.4.2) (2026-11-14)
 
 
